@@ -1,0 +1,51 @@
+version: "3.9"
+
+# AMD/ROCm GPU overlay. faster-whisper (CTranslate2) has no ROCm support and
+# the prebuilt pluja/whishper:*-gpu image is CUDA-only, so instead of trying
+# to run inference inside the monolith image, we:
+#   1. Use the `latest-gpu` monolith image only so its frontend bundle is
+#      built with PUBLIC_WHISHPER_PROFILE=gpu (sends device=cuda in requests
+#      - this is a SvelteKit *build-time* env var, can't be overridden here).
+#   2. Redirect the Go backend's ASR_ENDPOINT to a separate transcription-api
+#      container built on rocm/pytorch + openai-whisper, which actually talks
+#      to the GPU via /dev/kfd + /dev/dri.
+#   3. The internal CUDA transcription sidecar baked into the *-gpu image is
+#      left running but unused (no traffic is routed to it) - harmless idle.
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.rocm.yml up -d --build
+
+services:
+  whishper:
+    image: pluja/whishper:latest-gpu
+    environment:
+      ASR_ENDPOINT: transcription-rocm:8000
+      PUBLIC_WHISHPER_PROFILE: gpu
+
+  transcription-rocm:
+    build:
+      context: ./transcription-api
+      dockerfile: Dockerfile.rocm
+    container_name: whishper-transcription-rocm
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      WHISPER_MODELS_DIR: /app/models
+      WHISPER_BACKEND: openai-whisper
+    volumes:
+      - ./whishper_data/models-rocm:/app/models
+    devices:
+      - /dev/kfd
+      - /dev/dri
+    group_add:
+      - "986" # video (host GID)
+      - "989" # render (host GID)
+    security_opt:
+      - seccomp=unconfined
+    expose:
+      - 8000
+    networks:
+      default:
+        aliases:
+          - transcription-rocm

@@ -1,12 +1,11 @@
 from dotenv import load_dotenv
 from fastapi import FastAPI, UploadFile, File
 from models import ModelSize, Languages, DeviceType
-from transcribe import transcribe_file, transcribe_from_filename
+from transcribe import transcribe_file, transcribe_from_filename, get_backend_class
 import uvicorn
 import os
 from enum import Enum
 from typing import Annotated
-from backends.fasterwhisper import FasterWhisperBackend
 
 app = FastAPI()
     
@@ -40,7 +39,8 @@ if __name__ == "__main__":
     # Get model list (comma separated) from environment variable
     model_list = os.environ.get("WHISPER_MODELS", "tiny,base,small")
     model_list = model_list.split(",")
+    BackendClass = get_backend_class()
     for model in model_list:
-        m = FasterWhisperBackend(model_size=model)
+        m = BackendClass(model_size=model)
         m.get_model()
     uvicorn.run(app, host="0.0.0.0", port=8000)

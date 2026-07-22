@@ -193,6 +193,10 @@ func (s *Server) handleTranslate(c *fiber.Ctx) error {
 	err := transcription.Translate(targetLang)
 	if err != nil {
 		log.Debug().Err(err).Msg("Error with translation")
+		// Don't leave the transcription stuck in "translating" state forever.
+		transcription.Status = models.TranscriptionStatusDone
+		s.Db.UpdateTranscription(transcription)
+		s.BroadcastTranscription(transcription)
 		return err
 	}
 

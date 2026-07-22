@@ -1,0 +1,34 @@
+# ROCm (AMD GPU) transcription-api image.
+#
+# faster-whisper (CTranslate2) has no ROCm backend, so this image uses
+# openai-whisper on top of the PyTorch+ROCm build already baked into the
+# rocm/pytorch base image. torch is intentionally left untouched (installed
+# via --no-deps for openai-whisper) so we don't clobber the ROCm build with
+# a CPU-only wheel from PyPI.
+FROM rocm/pytorch:latest
+
+WORKDIR /app
+
+RUN export DEBIAN_FRONTEND=noninteractive \
+    && apt-get -qq update \
+    && apt-get -qq install --no-install-recommends \
+    ffmpeg curl \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements-rocm.txt requirements-rocm.txt
+RUN pip3 install -r requirements-rocm.txt
+
+# openai-whisper's own deps minus torch (already provided by the ROCm base image)
+RUN pip3 install --no-deps openai-whisper \
+    && pip3 install numba tiktoken more-itertools
+
+COPY . .
+
+ENV WHISPER_BACKEND=openai-whisper
+ENV WHISPER_MODELS_DIR=/app/models
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s \
+CMD ["python3", "healthcheck.py"]
+
+EXPOSE 8000
+CMD ["python3", "main.py"]

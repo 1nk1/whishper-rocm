@@ -67,7 +67,7 @@
 			return;
 		}
 
-		if (!sourceUrl && !fileInput) {
+		if (!sourceUrl && (!fileInput || fileInput.files.length === 0)) {
 			toast.error('No file or URL.');
 			return;
 		}
